@@ -29,7 +29,7 @@ function InvertedPendulumSimulation(controller, varargin)
 
     addParameter(p,'moviefile',[],@ischar);
     addParameter(p,'display',true,@islogical);
-    addParameter(p,'tStop',30,@(x) isscalar(x) && isnumeric(x) && (x>0));
+    addParameter(p,'tStop',10,@(x) isscalar(x) && isnumeric(x) && (x>0));
     addParameter(p,'iDelay',0,@(x) isscalar(x) && isnumeric(x) && (x>=0));
     addParameter(p,'showGraph',true,@(x) isscalar(x) && isnumeric(x) && (x>=0));
 
@@ -66,24 +66,19 @@ function [process,controller] = SetupSimulation(process)
     % Parameters
 
     % - Lengths (m)
-    process.L = 4;            
+    process.L = 0.04064;            
     
     % - Masses (kg)
-    process.mc = 4;            % cart weight
-    process.mp = 0;            % pendulum weight  
-    process.mw = 2;            % ball weight at tip 
+    process.M = 1.5;            % cart weight
+    process.m = 1;            % ball weight at tip 
     
     % - Moments of inertia
-    process.Ip = 1/3*(process.mp)*process.L^2; % moment of intertia rod
-    process.Iw = (process.mp)*process.L^2;     % moment of intertia ball
+    process.Iw = (process.m)*process.L^2;     % moment of intertia ball
     
-    process.M = process.mc + process.mp + process.mw;
-    process.Mb = 1/2 * process.mp + process.mw;
-    process.Mr = 1/4 * process.mp + process.mw + process.Ip/process.L^2 + process.Iw/process.L^2;
-    
+
     % friction
-    process.dcart = .1;
-    process.dpendulum = .1;
+    process.dcart = 0.3;
+    process.dpendulum = 0;
     
 
     % - EOM
@@ -93,9 +88,8 @@ function [process,controller] = SetupSimulation(process)
         load(filename);
     else
         [symEOM,numEOM] = GetEOM(process.g,...
-                                 process.Ip,process.Iw,...
-                                 process.mc,process.mp, process.mw,...
-                                 process.M, process.Mb, process.Mr,...
+                                 process.Iw,...
+                                 process.M,process.m,...
                                  process.L);
 	    fprintf(1,'Saving EOMs to file (load %s to work with them).\n',filename);
 	    save('Project05_EOMs.mat','symEOM','numEOM');
@@ -106,7 +100,7 @@ function [process,controller] = SetupSimulation(process)
 
 
     % - Maximum force
-    process.forceMax = inf;
+    process.forceMax = 10;
     
     % DEFINE VARIABLES
     
@@ -115,7 +109,7 @@ function [process,controller] = SetupSimulation(process)
     % States
     process.x = 0;%initialCondition.x;
     process.v = 0;
-    process.theta = pi;%initialCondition.theta;
+    process.theta = pi/4;%initialCondition.theta;
     process.omega = 0;
 
     %window size
@@ -128,8 +122,19 @@ function [process,controller] = SetupSimulation(process)
     process.cartY = [-process.cartSize, -process.cartSize, process.cartSize, process.cartSize];
     
     % graphs
+    process.graph.x1 = zeros(1, process.tStop / process.tStep);
+    process.graph.x2 = zeros(1, process.tStop / process.tStep);
+    process.graph.x3 = zeros(1, process.tStop / process.tStep);
+    process.graph.x4 = zeros(1, process.tStop / process.tStep);
+
+    process.graph.x3hat = zeros(1, process.tStop / process.tStep);
+
+    process.graph.xhat = zeros(4, process.tStop / process.tStep);
+
+
     process.graph.control = zeros(1, process.tStop / process.tStep);
-        
+    
+    process.graph.i = 1;
 
     % DEFINE CONTROLLER
 
@@ -201,14 +206,17 @@ function [process,controller] = SetupSimulation(process)
     controller.tComputation = toc;
 end
 
-function [symEOM,numEOM] = GetEOM(g,Ip,Iw, mc,mp,mw,M,M_b,M_r,L)
+function [symEOM,numEOM] = GetEOM(g,Iw,M, m, L)
     syms x1 x2 x3 x4 x v theta omega u F;
     l = L;
-    xdot = [x2; 
-            u/M + (M_b*l*x4^2*sin(x3))/(2*M) - (M_b^2*cos(x3)*(M_b*l*cos(x3)*sin(x3)*x4^2 + 2*u*cos(x3) + 2*M*g*sin(x3)))/(2*M*(M_b*cos(x3)^2 - 2*M*M_r)); 
-            x4; 
-            (M_b*(M_b*l*cos(x3)*sin(x3)*x4^2 + 2*u*cos(x3) + 2*M*g*sin(x3)))/(l*(M_b*cos(x3)^2 - 2*M*M_r))];
+    xdot = [
+        x2; 
+        (4*sin(x3)*m^2*x4^2 - x2*sin(2*x3)*m^2*x4 - 2*g*sin(2*x3)*m^2 + 4*M*sin(x3)*m*x4^2 + 8*u*m + 8*M*u)/(16*M*m - m^2*cos(2*x3) + 8*M^2 + 7*m^2); 
+        x4; 
+        (m*(4*g*m*sin(x3) - 2*u*cos(x3) + 4*M*g*sin(x3) - m*x4^2*cos(x3)*sin(x3) + 2*M*x2*x4*sin(x3) + 2*m*x2*x4*sin(x3)))/(l*(4*M^2 + 8*M*m - m^2*cos(x3)^2 + 4*m^2))
+           ];
     
+   
     symEOM.f = subs(xdot, [x1, x2, x3, x4, u], [x v theta omega, F]);
     % Numeric
     numEOM.f = matlabFunction(symEOM.f,'Vars',[x v theta omega, F]);
@@ -354,7 +362,7 @@ function fig = UpdateFigure(process,controller,fig)
             sprintf('CONTROLLER: %s',status),...
             'fontweight','bold','fontsize',fs,...
             'color',color,'verticalalignment','top');
-        fig.text.time=text(0.5,0.975,...
+        fig.text.time=text(0.05,0.9,...
             sprintf('time: %6.2f\n',process.t),...
             'fontsize',fs,'verticalalignment','top','fontname','monaco');
 
@@ -370,13 +378,29 @@ function fig = UpdateFigure(process,controller,fig)
 
         fig.view0.model = drawModel([], model);
     
-        fig.view0.model.ground1 = line([-process.w process.w], [-process.cartSize -process.cartSize], 'LineWidth', 2, 'Color', 'black');
+%         fig.view0.model.ground1 = line([-process.w process.w], [-process.cartSize -process.cartSize], 'LineWidth', 2, 'Color', 'black');
        
         
+        x = linspace(-10, 1, 10);      % x data
+        y = x*0 -process.cartSize;                     % y data
+        
+        % Create a colormap from red to pink
+        numSegments = length(x) - 1;    % Number of line segments
+        colors = [linspace(1, 1, numSegments)', linspace(0, 0.75, numSegments)', linspace(0, 0.75, numSegments)'];
+        
+        
+        hold on;
+        
+        % Plot each line segment with a different color
+        for i = 1:numSegments
+            fig.view0.model.ground(i) = plot(x(i:i+1), y(i:i+1), 'Color', colors(i, :), 'LineWidth', 2);
+        end
+
+
         if(process.showGraph)
             fig.view1.axis = axes('position',[.6 .1 .4 .4]);
             axis normal
-            axis([0 10 -process.forceMax process.forceMax]);
+            axis([0 process.tStop -process.forceMax process.forceMax]);
             hold on;
             axis on;
             
@@ -384,6 +408,28 @@ function fig = UpdateFigure(process,controller,fig)
             fig.view1.graph.control = plot([0], [0], 'b', 'LineWidth', 2);
             xlabel('t') 
             ylabel('u') 
+       
+
+
+            fig.view2.axis = axes('position',[.6 .5 .4 .4]);
+            axis auto
+%             axis([0 process.tStop -1.5*pi 1.5*pi]);
+            hold on;
+            axis on;
+            
+            % Initialize plot for control graph with initial data (ensure lengths match)
+            fig.view2.graph.x3 = plot([0], [0], 'b', 'LineWidth', 2);
+            xlabel('t') 
+            ylabel('\theta') 
+
+
+            fig.view2.graph.x3hat = plot([0], [0], '--r', 'LineWidth', 2);
+            xlabel('t') 
+            ylabel('hat t') 
+            legend('- \theta(t)', '- hat t(t)')
+           
+%             fig.view2.graph.x4 = plot([0], [0], 'b', 'LineWidth', 2);
+
         end
     else
         
@@ -403,22 +449,27 @@ function fig = UpdateFigure(process,controller,fig)
 
     
         if(process.showGraph)
-            ts = max(0, process.t-8);
-            te = max(10, process.t+2);
-            
+            T = 0:process.tStep:process.tStop;
+       
      
-            newTimeData = 0:process.tStep:process.t-process.tStep;
-            controlData = process.graph.control(1:numel(newTimeData));
+   
+            set(fig.view1.axis, 'YLim', [min(process.graph.control)-5 max(process.graph.control)+5]);
+            set(fig.view1.graph.control, 'XData', T(1:process.graph.i-1), 'YData', process.graph.control(1:process.graph.i-1));
 
-            set(fig.view1.axis, 'XLim', [ts te], 'YLim', [min(controlData)-5 max(controlData)+5]);
-            set(fig.view1.graph.control, 'XData', newTimeData, 'YData', controlData);
+              
+            set(fig.view2.axis, 'XLim', [0 process.tStop]);
+            set(fig.view2.graph.x3, 'XData', T(1:process.graph.i-1), 'YData', process.graph.x3(1:process.graph.i-1));
+            set(fig.view2.graph.x3hat, 'XData', T(1:process.graph.i-1), 'YData', process.graph.x3hat(1:process.graph.i-1));
+
+%             set(fig.view2.graph.x4, 'XData', T(1:process.graph.i-1), 'YData', process.graph.x4(1:process.graph.i-1));
+
         end
      end
     drawnow;
 end
 
 function modelfig = drawModel(modelfig, model)
-    L = model.L;
+    L = 4;%model.L * 100;
     x = model.x;
     theta = model.theta;
     cartX = model.cartX;
@@ -460,8 +511,18 @@ function [process, controller] = UpdateProcess(process, controller)
         process = Get_Process_From_TandX(t(end),x(end,:)',process);
         
         % add to graphs
-        process.graph.control(int64(1 + process.t / process.tStep)) = u;
 
+        process.graph.x1(process.graph.i) = process.x;
+        process.graph.x2(process.graph.i) = process.v;
+        process.graph.x3(process.graph.i) = process.theta;
+        process.graph.x4(process.graph.i) = process.omega;
+        
+        process.graph.x3hat(process.graph.i) = controller.data.xhat(3);
+        process.graph.control(process.graph.i) = u;
+
+        
+
+        process.graph.i = process.graph.i + 1;
         % Get reference values
         controller.references = GetReferences(process);
         
@@ -518,8 +579,7 @@ end
 
 function xdot = GetXDot(t,x,u,process)
     M = process.M;
-    M_b = process.Mb;
-    M_r = process.Mr;
+    m = process.m;
     l = process.L;
     g = process.g;
     x1 = x(1,1);
@@ -527,10 +587,16 @@ function xdot = GetXDot(t,x,u,process)
     x3 = x(3,1);
     x4 = x(4,1);
 
-    xdot = [x2; 
-            u/M + (M_b*l*x4^2*sin(x3))/(2*M) - (M_b^2*cos(x3)*(M_b*l*cos(x3)*sin(x3)*x4^2 + 2*u*cos(x3) + 2*M*g*sin(x3)))/(2*M*(M_b*cos(x3)^2 - 2*M*M_r)) - process.dcart*x2; 
+    dc = process.dcart;
+    dp = process.dpendulum; 
+    
+    xdot = [
+            x2; 
+            (4*sin(x3)*m^2*x4^2 - x2*sin(2*x3)*m^2*x4 - 2*g*sin(2*x3)*m^2 + 4*M*sin(x3)*m*x4^2 + 8*u*m + 8*M*u)/(16*M*m - m^2*cos(2*x3) + 8*M^2 + 7*m^2); 
             x4; 
-            (M_b*(M_b*l*cos(x3)*sin(x3)*x4^2 + 2*u*cos(x3) + 2*M*g*sin(x3)))/(l*(M_b*cos(x3)^2 - 2*M*M_r)) - process.dpendulum*x4];
+            (m*(4*g*m*sin(x3) - 2*u*cos(x3) + 4*M*g*sin(x3) - m*x4^2*cos(x3)*sin(x3) + 2*M*x2*x4*sin(x3) + 2*m*x2*x4*sin(x3)))/(l*(4*M^2 + 8*M*m - m^2*cos(x3)^2 + 4*m^2))
+           ];
+    
 end
 
 function [t,x] = Get_TandX_From_Process(process)

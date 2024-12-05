@@ -79,13 +79,36 @@ ue = [0];
     
     % save any data that will be needed later
     
+    data.dt = parameters.tStep;
     data.t = 0;
     data.ze = ze;
-    data.ur = ue;
+    data.ue = ue;
     data.A = A;
     data.B = B;
+    C = [1 0 0 0];
+%      C = [1, 0, 0, 0;
+%           0, 1, 0, 0];
+    data.C = C;
+    
+    % kalman filter
+    data.xhat = [0; 0; pi/4; 0];
 
-    data.K = place(A, B, [-.01, -.1, -6, -.4]);
+    Vd = .1*diag([1, 1, 1, 1]);
+    Vn = 1*diag([1]);
+    
+    data.Kf = lqr(A', C', Vd, Vn)';
+%     data.Kf = [10; 10; 10; 10];
+    data.Kf
+
+    % proportional
+    Q = diag([1 1 10 100]);
+    R = diag([10]);
+%    data.K = place(A, B, [-1, -1.2, -3, -4]);
+    data.K = lqr(data.A, data.B, Q, R);
+    data.K
+    % intergal action
+    data.w = [0; 0; 0; 0];
+    data.Kint = .01*[1 1 1 1];
 end
 
 %
@@ -95,9 +118,31 @@ function [actuators,data] = runControlSystem(sensors,references,parameters,data)
 %%%%%%%%%% UPDATE YOUR CONTROLLER AND OBSERVER HERE %%%%%%%%%% 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    x = [sensors.x; sensors.v; sensors.theta; sensors.omega];
+    theta = sensors.theta;
+%     theta =  mod(theta + pi, 2*pi) - pi;
+   
+    x = [sensors.x; sensors.v; theta; sensors.omega];
 
-    actuators.force = - data.K * (x - data.ze);
+    % control
+    u = data.ue - data.K * (x- data.ze) - data.Kint * data.w;
+    maxForce = 10;
+    u = min(maxForce, max(-maxForce, u));
 
-    data.t = data.t + parameters.tStep;
+    % measurement
+    y = data.C*x;
+       
+
+    % update
+%   xhatdot = data.A*data.xhat + data.B*u - data.Kf*(y-yhat);
+    [tt, xxhat] = ode45(@(t, xx) data.A*(xx-data.ze) + data.B*(u-data.ue) + data.Kf*(y-data.C*xx), [data.t, data.t+data.dt], data.xhat);
+    data.xhat = xxhat(end,:)';
+    data.xhat
+  
+   
+     data.w = data.w + (x - data.ze) * data.dt;
+
+   
+    actuators.force = u;
+    
+    data.t = data.t + data.dt;
 end
