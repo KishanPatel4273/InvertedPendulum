@@ -19,12 +19,12 @@ In InvertedPendulum.pdf lagrange mechanics is used to derive the dynamics of the
 
 | Quantity | Part
 |----------|------|
-| 2x | Cart.stl |
-| 1x | Plate.stl |
-| 1x | PulleyStand.stl |
-| 1x | BearingToPulleyPin.stl |
-| 1x | EncoderMount.stl |
-| 1x | PendulumMount.stl |
-| 1x | Pendulum.stl |
-| 1x | StepperMotorMount.stl |
-| 1x | StepperMotorAdapter.stl |
+| 2x | [Cart.stl](/V1/Cart.stl) |
+| 1x | [Plate.stl](/V1/Plate.stl) |
+| 1x | [PulleyStand.stl](/V1/PulleyStand.stl) |
+| 1x | [BearingToPulleyPin.stl](/V1/BearingToPulleyPin.stl) |
+| 1x | [EncoderMount.stl](/V1/EncoderMount.stl) |
+| 1x | [PendulumMount.stl](/V1/PendulumMount.stl) |
+| 1x | [Pendulum.stl](/V1/Pendulum.stl) |
+| 1x | [StepperMotorMount.stl](/V1/StepperMotorMount.stl) |
+| 1x | [StepperMotorAdapter.stl](/V1/StepperMotorAdapter.stl) |
