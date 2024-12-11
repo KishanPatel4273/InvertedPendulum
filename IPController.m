@@ -51,7 +51,7 @@ function [actuators,data] = initControlSystem(sensors,references,parameters,data
 
 % define the state, control, and output in the nonlinear system
     
-    syms x v theta omega F;
+    syms x v theta omega F delta;
      
     z = [x; v; theta; omega];
     u = [F];
@@ -64,7 +64,6 @@ ue = [0];
 % define the nonlinear equations of motion
 
     f_sys = parameters.symEOM.f;
-    
     dfdz = jacobian(f_sys, z);
     dfdv = jacobian(f_sys, u);
     
@@ -86,12 +85,12 @@ ue = [0];
     data.A = A;
     data.B = B;
     C = [1 0 0 0];
-%      C = [1, 0, 0, 0;
-%           0, 1, 0, 0];
+%     C = [1, 0, 0, 0;
+%          0, 0, 1, 0];
     data.C = C;
     
     % kalman filter
-    data.xhat = [0; 0; pi/4; 0];
+    data.xhat = [0; 0; pi; 0];
 
     Vd = .1*diag([1, 1, 1, 1]);
     Vn = 1*diag([1]);
@@ -119,27 +118,29 @@ function [actuators,data] = runControlSystem(sensors,references,parameters,data)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     theta = sensors.theta;
-%     theta =  mod(theta + pi, 2*pi) - pi;
+    theta =  mod(theta + pi, 2*pi) - pi;
    
     x = [sensors.x; sensors.v; theta; sensors.omega];
 
     % control
-    u = data.ue - data.K * (x- data.ze) - data.Kint * data.w;
+    u = data.ue - data.K * (x - data.ze) - data.Kint * data.w;
+
     maxForce = 10;
     u = min(maxForce, max(-maxForce, u));
 
     % measurement
     y = data.C*x;
        
+    
+    data.xhat(3) = mod(data.xhat(3) + pi, 2*pi) - pi; 
 
     % update
-%   xhatdot = data.A*data.xhat + data.B*u - data.Kf*(y-yhat);
-    [tt, xxhat] = ode45(@(t, xx) data.A*(xx-data.ze) + data.B*(u-data.ue) + data.Kf*(y-data.C*xx), [data.t, data.t+data.dt], data.xhat);
+    xhatdot = @(t, xx) data.A*(xx-data.ze) + data.B*(u-data.ue) + data.Kf*(y-data.C*xx);
+    [tt, xxhat] = ode45(xhatdot, [data.t, data.t+data.dt], data.xhat);
     data.xhat = xxhat(end,:)';
-    data.xhat
-  
+    
    
-     data.w = data.w + (x - data.ze) * data.dt;
+    data.w = data.w + (x - data.ze) * data.dt;
 
    
     actuators.force = u;

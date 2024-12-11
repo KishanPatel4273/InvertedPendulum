@@ -29,7 +29,7 @@ function InvertedPendulumSimulation(controller, varargin)
 
     addParameter(p,'moviefile',[],@ischar);
     addParameter(p,'display',true,@islogical);
-    addParameter(p,'tStop',10,@(x) isscalar(x) && isnumeric(x) && (x>0));
+    addParameter(p,'tStop',30,@(x) isscalar(x) && isnumeric(x) && (x>0));
     addParameter(p,'iDelay',0,@(x) isscalar(x) && isnumeric(x) && (x>=0));
     addParameter(p,'showGraph',true,@(x) isscalar(x) && isnumeric(x) && (x>=0));
 
@@ -66,7 +66,7 @@ function [process,controller] = SetupSimulation(process)
     % Parameters
 
     % - Lengths (m)
-    process.L = 0.04064;            
+    process.L = .3;%0.04064;            
     
     % - Masses (kg)
     process.M = 1.5;            % cart weight
@@ -77,7 +77,7 @@ function [process,controller] = SetupSimulation(process)
     
 
     % friction
-    process.dcart = 0.3;
+    process.dcart = .3;
     process.dpendulum = 0;
     
 
@@ -90,7 +90,8 @@ function [process,controller] = SetupSimulation(process)
         [symEOM,numEOM] = GetEOM(process.g,...
                                  process.Iw,...
                                  process.M,process.m,...
-                                 process.L);
+                                 process.L, ...
+                                 process.dcart);
 	    fprintf(1,'Saving EOMs to file (load %s to work with them).\n',filename);
 	    save('Project05_EOMs.mat','symEOM','numEOM');
     end
@@ -109,7 +110,7 @@ function [process,controller] = SetupSimulation(process)
     % States
     process.x = 0;%initialCondition.x;
     process.v = 0;
-    process.theta = pi/4;%initialCondition.theta;
+    process.theta = pi/5;%initialCondition.theta;
     process.omega = 0;
 
     %window size
@@ -206,18 +207,18 @@ function [process,controller] = SetupSimulation(process)
     controller.tComputation = toc;
 end
 
-function [symEOM,numEOM] = GetEOM(g,Iw,M, m, L)
-    syms x1 x2 x3 x4 x v theta omega u F;
+function [symEOM,numEOM] = GetEOM(g,Iw,m_c, m_w, L, dc)
+    syms x_1 x_2 x_3 x_4 x v theta omega u F;
     l = L;
-    xdot = [
-        x2; 
-        (4*sin(x3)*m^2*x4^2 - x2*sin(2*x3)*m^2*x4 - 2*g*sin(2*x3)*m^2 + 4*M*sin(x3)*m*x4^2 + 8*u*m + 8*M*u)/(16*M*m - m^2*cos(2*x3) + 8*M^2 + 7*m^2); 
-        x4; 
-        (m*(4*g*m*sin(x3) - 2*u*cos(x3) + 4*M*g*sin(x3) - m*x4^2*cos(x3)*sin(x3) + 2*M*x2*x4*sin(x3) + 2*m*x2*x4*sin(x3)))/(l*(4*M^2 + 8*M*m - m^2*cos(x3)^2 + 4*m^2))
-           ];
+    delta = dc;
+    xdot = [x_2;
+            (2*l*m_w*sin(x_3)*x_4^2 + 2*u + g*m_w*cos(x_3)*sin(x_3))/(- m_w*cos(x_3)^2 + 2*m_c + 2*m_w) - delta*x_2; 
+            x_4; 
+            - delta*x_2 - (l*m_w*cos(x_3)*sin(x_3)*x_4^2 + u*cos(x_3) + g*m_c*sin(x_3) + g*m_w*sin(x_3))/(l*(- m_w*cos(x_3)^2 + 2*m_c + 2*m_w))
+            ];
     
    
-    symEOM.f = subs(xdot, [x1, x2, x3, x4, u], [x v theta omega, F]);
+    symEOM.f = subs(xdot, [x_1, x_2, x_3, x_4, u], [x v theta omega, F]);
     % Numeric
     numEOM.f = matlabFunction(symEOM.f,'Vars',[x v theta omega, F]);
 end
@@ -578,24 +579,23 @@ end
 
 
 function xdot = GetXDot(t,x,u,process)
-    M = process.M;
-    m = process.m;
+    m_c = process.M;
+    m_w = process.m;
     l = process.L;
     g = process.g;
-    x1 = x(1,1);
-    x2 = x(2,1);
-    x3 = x(3,1);
-    x4 = x(4,1);
+    x_1 = x(1,1);
+    x_2 = x(2,1);
+    x_3 = x(3,1);
+    x_4 = x(4,1);
 
-    dc = process.dcart;
+    delta = process.dcart;
     dp = process.dpendulum; 
     
-    xdot = [
-            x2; 
-            (4*sin(x3)*m^2*x4^2 - x2*sin(2*x3)*m^2*x4 - 2*g*sin(2*x3)*m^2 + 4*M*sin(x3)*m*x4^2 + 8*u*m + 8*M*u)/(16*M*m - m^2*cos(2*x3) + 8*M^2 + 7*m^2); 
-            x4; 
-            (m*(4*g*m*sin(x3) - 2*u*cos(x3) + 4*M*g*sin(x3) - m*x4^2*cos(x3)*sin(x3) + 2*M*x2*x4*sin(x3) + 2*m*x2*x4*sin(x3)))/(l*(4*M^2 + 8*M*m - m^2*cos(x3)^2 + 4*m^2))
-           ];
+    xdot = [x_2; 
+        (2*l*m_w*sin(x_3)*x_4^2 + 2*u + g*m_w*cos(x_3)*sin(x_3))/(- m_w*cos(x_3)^2 + 2*m_c + 2*m_w) - delta*x_2; 
+        x_4;
+        - delta*x_2 - (l*m_w*cos(x_3)*sin(x_3)*x_4^2 + u*cos(x_3) + g*m_c*sin(x_3) + g*m_w*sin(x_3))/(l*(- m_w*cos(x_3)^2 + 2*m_c + 2*m_w))
+        ];
     
 end
 
